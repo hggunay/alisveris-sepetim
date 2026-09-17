@@ -42,8 +42,10 @@
     font-size:18px;line-height:1.35;-webkit-tap-highlight-color:transparent}
   body{padding:0 14px calc(110px + env(safe-area-inset-bottom))}
   main{max-width:560px;margin:0 auto}
-  h1{font-size:1.45rem;margin:.9rem 0 .1rem;display:flex;align-items:center;gap:.45rem}
-  h1 img{width:40px;height:40px;border-radius:10px}
+  h1{font-size:1.45rem;margin:.9rem 0 .1rem;display:flex;align-items:center;gap:.6rem}
+  /* Simge büyütüldü (Gökşin, 2026-09-17: "biraz görsellik olsun").
+     Köşeler simgenin kendisinde yuvarlak, burada ayrıca yuvarlatılmıyor. */
+  h1 img{width:64px;height:64px;flex:0 0 auto}
   .alt-baslik{color:var(--yazi2);font-size:.95rem;margin-bottom:.6rem}
   button{font:inherit;color:inherit;cursor:pointer}
   input{font:inherit;font-size:1.1rem;width:100%;padding:.8rem .9rem;border:2px solid var(--cizgi);
@@ -86,6 +88,8 @@
   #yeni-serit small{display:block;font-weight:400;color:var(--yazi2);font-size:.85rem;margin-top:.15rem}
   #wa-dugme{display:block;width:100%;min-height:54px;margin:1.6rem 0 0;border:2px solid #1f8f4e;border-radius:14px;
     background:#e6f6ec;color:#12693a;font-weight:700;font-size:1.02rem}
+  #alindi-daha{display:block;width:100%;min-height:46px;margin:.3rem 0 0;border:2px dashed var(--cizgi);
+    border-radius:12px;background:transparent;color:var(--yazi2);font-size:.95rem;font-weight:600}
 
   /* Ekle düğmesi */
   #ekle-dugme{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));
@@ -206,6 +210,7 @@
   <div id="bolum-alindi" hidden>
     <div class="bolum-baslik">✅ Alındı <span style="font-weight:500;text-transform:none;letter-spacing:0">· 2 gün sonra silinir</span></div>
     <div id="liste-alindi"></div>
+    <button id="alindi-daha" type="button" hidden></button>
   </div>
   <div id="liste-bos" class="bos" hidden>Liste boş.<br>Eksik bir şey varsa aşağıdaki <b>+</b> ile ekle.</div>
 
@@ -249,6 +254,7 @@ const DENEME_MODU = (() => { try { return new URLSearchParams(location.search).h
 const FIREBASE_DB_URL = DENEME_MODU ? '' : FIREBASE_DB_URL_ASIL;
 
 const ALINDI_SILME_SAAT = 48;   // "alındı" işaretli ürün bu kadar saat sonra silinir
+const ALINDI_ILK = 3;           // "Alındı" bölümünde ilk kaç satır görünsün (gerisi düğme ardında)
 const BENZER_EN_AZ_HARF = 4;    // "benzer ürün" uyarısı bu uzunluktan kısa adlarda yok (süt/set, un/su)
 const ANAHTAR_TUZU = 'alisveris-sepetim/v1';
 const LS = { anahtar:'as_aile_anahtar', aileAd:'as_aile_ad', kisi:'as_kisi', yerelDb:'as_yerel_db', sonBakis:'as_son_bakis' };
@@ -706,9 +712,18 @@ function listeyiCiz(){
   const b = bolumlereAyir(urunler, simdi);
   yeniSeridiCiz(simdi);
   $('wa-dugme').hidden = !(b.acil.length || b.normal.length);
+  /* ⚠️ BEKLEYENLER HİÇ KISALTILMIYOR (Gökşin sordu, 2026-09-17: "liste uzarsa
+     daha fazla butonu ekleyelim mi").  Markette olan kişi listenin TAMAMINI
+     görmeli; bir kısmı düğme arkasında kalırsa unutulur. Kısaltma yalnızca
+     "Alındı" bölümünde: orası 48 saat boyunca birikiyor ve bekleyenleri aşağı
+     itiyor, ama bir eylem listesi değil, geçmiş kaydı. */
+  const gorunenAlindi = _alindiHepsi ? b.alindi : b.alindi.slice(0, ALINDI_ILK);
   $('liste-acil').innerHTML   = b.acil.map(urunHtml).join('');
   $('liste-normal').innerHTML = b.normal.map(urunHtml).join('');
-  $('liste-alindi').innerHTML = b.alindi.map(urunHtml).join('');
+  $('liste-alindi').innerHTML = gorunenAlindi.map(urunHtml).join('');
+  const kalan = b.alindi.length - gorunenAlindi.length;
+  $('alindi-daha').hidden = !(kalan > 0 || (_alindiHepsi && b.alindi.length > ALINDI_ILK));
+  $('alindi-daha').textContent = kalan > 0 ? ('↓ Daha fazla (' + kalan + ')') : '↑ Kısalt';
   $('bolum-acil').hidden   = !b.acil.length;
   $('bolum-normal').hidden = !b.normal.length;
   $('bolum-alindi').hidden = !b.alindi.length;
@@ -761,6 +776,9 @@ function tekrarKontrol(ad, harita, haricId, simdi){
    ALT PANEL (ekle / düzenle / ürün seçenekleri)
    ══════════════════════════════════════════════════════════════════════ */
 let _paneldekiId = null;
+/* "Alındı" bölümü açık mı — yalnızca bu oturum için, kaydedilmiyor:
+   uygulamayı yeniden açınca yine kısa gelsin. */
+let _alindiHepsi = false;
 
 function panelAc(html, id){
   _paneldekiId = id || null;
@@ -917,6 +935,7 @@ function olaylariBagla(){
   $('perde').addEventListener('click', panelKapat);
   $('yeni-serit').addEventListener('click', yeniSeridiKapat);
   $('wa-dugme').addEventListener('click', waPaylas);
+  $('alindi-daha').addEventListener('click', () => { _alindiHepsi = !_alindiHepsi; listeyiCiz(); });
 
   $('ekran-liste').addEventListener('click', e => {
     const b = e.target.closest('.urun');
