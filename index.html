@@ -70,6 +70,11 @@
   .urun.parla{animation:parla 1.6s ease}
   @keyframes parla{0%,60%{box-shadow:0 0 0 4px var(--dugme)}100%{box-shadow:var(--golge)}}
   .bos{text-align:center;color:var(--yazi2);margin:3rem 1rem;font-size:1.05rem}
+  #yeni-serit{display:block;width:100%;text-align:left;border:2px solid var(--yesil-cizgi);background:var(--yesil-zemin);
+    border-radius:14px;padding:.8rem 1rem;margin:.2rem 0 .4rem;font-size:1rem;font-weight:650;color:var(--yazi)}
+  #yeni-serit small{display:block;font-weight:400;color:var(--yazi2);font-size:.85rem;margin-top:.15rem}
+  #wa-dugme{display:block;width:100%;min-height:54px;margin:1.6rem 0 0;border:2px solid #1f8f4e;border-radius:14px;
+    background:#e6f6ec;color:#12693a;font-weight:700;font-size:1.02rem}
 
   /* Ekle düğmesi */
   #ekle-dugme{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom));
@@ -117,7 +122,8 @@
   <div class="alt-baslik">Ailenin ortak alışveriş listesi</div>
   <div class="kutu">
     <label for="giris-aile">Aile adı</label>
-    <input id="giris-aile" type="text" autocomplete="off" autocapitalize="words" placeholder="örn. Günay">
+    <!-- Yer tutucu bilerek NÖTR bir ad: gerçek soyadı herkese görünmesin (Gökşin, 2026-09-17). -->
+    <input id="giris-aile" type="text" autocomplete="off" autocapitalize="words" placeholder="örn. Yıldız">
     <label for="giris-pin">PIN (4 rakam)</label>
     <!-- Göz düğmesi: PIN gizli yazıldığı için yanlış rakama bastığını
          göremiyordun (Gökşin, 2026-09-17). -->
@@ -127,6 +133,13 @@
         style="flex:0 0 auto;min-width:58px;border:2px solid var(--cizgi);border-radius:12px;background:#fff;font-size:1.3rem">👁</button>
     </div>
     <div class="ipucu">Ailedeki herkes aynı aile adını ve PIN'i kullanır.</div>
+    <!-- "Beni hatırla" (Gökşin, 2026-09-17). İşaretliyse telefon aileyi ve adı
+         hatırlar, bir daha PIN sorulmaz. İşaretsizse yalnızca o oturum:
+         tarayıcı kapanınca unutulur (ör. arkadaşının telefonundan bakarken). -->
+    <label style="display:flex;align-items:center;gap:.6rem;margin-top:1rem;font-weight:600;cursor:pointer">
+      <input type="checkbox" id="giris-hatirla" checked style="width:24px;height:24px;flex:0 0 auto">
+      Beni hatırla (bir daha PIN sorma)
+    </label>
     <div id="giris-hata" class="hata" hidden></div>
     <button id="giris-dugme" class="buyuk" type="button">Devam</button>
 
@@ -166,6 +179,11 @@
   <h1><img src="icon-192.png" alt=""> Alışveriş Sepetim</h1>
   <div class="alt-baslik" id="liste-alt"></div>
 
+  <!-- Bildirim yerine geçen iki şey (Gökşin, 2026-09-17): telefon kapalıyken
+       haber vermek sunucu istiyor, o yüzden (1) açınca ne kaçırdığını söyleyen
+       şerit, (2) WhatsApp'a tek dokunuşla haber verme. -->
+  <button id="yeni-serit" type="button" hidden></button>
+
   <div id="bolum-acil" hidden>
     <div class="bolum-baslik acil">🔴 Acil</div>
     <div id="liste-acil"></div>
@@ -179,6 +197,8 @@
     <div id="liste-alindi"></div>
   </div>
   <div id="liste-bos" class="bos" hidden>Liste boş.<br>Eksik bir şey varsa aşağıdaki <b>+</b> ile ekle.</div>
+
+  <button id="wa-dugme" type="button" hidden>🟢 WhatsApp'ta haber ver</button>
 
   <footer>
     <div id="alt-kisi"></div>
@@ -220,7 +240,7 @@ const FIREBASE_DB_URL = DENEME_MODU ? '' : FIREBASE_DB_URL_ASIL;
 const ALINDI_SILME_SAAT = 48;   // "alındı" işaretli ürün bu kadar saat sonra silinir
 const BENZER_EN_AZ_HARF = 4;    // "benzer ürün" uyarısı bu uzunluktan kısa adlarda yok (süt/set, un/su)
 const ANAHTAR_TUZU = 'alisveris-sepetim/v1';
-const LS = { anahtar:'as_aile_anahtar', aileAd:'as_aile_ad', kisi:'as_kisi', yerelDb:'as_yerel_db' };
+const LS = { anahtar:'as_aile_anahtar', aileAd:'as_aile_ad', kisi:'as_kisi', yerelDb:'as_yerel_db', sonBakis:'as_son_bakis' };
 
 /* ══════════════════════════════════════════════════════════════════════
    YARDIMCILAR
@@ -228,8 +248,18 @@ const LS = { anahtar:'as_aile_anahtar', aileAd:'as_aile_ad', kisi:'as_kisi', yer
 const $ = id => document.getElementById(id);
 const kacis = s => String(s == null ? '' : s)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-const lsOku = k => { try { return localStorage.getItem(k); } catch(e) { return null; } };
-const lsYaz = (k,v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k,v); } catch(e) {} };
+/* İki hafıza: kalıcı (localStorage — "beni hatırla" işaretliyse) ve geçici
+   (sessionStorage — tarayıcı kapanınca unutuluyor). Okuma ikisine birden
+   bakıyor, yazma o anki tercihe gidiyor. */
+let kaliciHafiza = true;
+const lsOku = k => { try { return localStorage.getItem(k) ?? sessionStorage.getItem(k); } catch(e) { return null; } };
+const lsYaz = (k,v) => {
+  try{
+    if(v == null){ localStorage.removeItem(k); sessionStorage.removeItem(k); return; }
+    (kaliciHafiza ? localStorage : sessionStorage).setItem(k, v);
+    (kaliciHafiza ? sessionStorage : localStorage).removeItem(k);
+  }catch(e){}
+};
 
 /* Karşılaştırma için sadeleştirme: büyük/küçük harf, Türkçe harfler,
    noktalama ve fazla boşluk yok sayılır. "YOĞURT", "yogurt", " Yoğurt."
@@ -303,7 +333,7 @@ function sha256(metin){
    ⚠️ PIN HİÇBİR YERE YAZILMIYOR — ne veritabanına ne telefona. Telefonda
    yalnızca anahtar saklanıyor. Firebase kuralları "tüm aileleri listele"
    isteğini reddediyor; aile adını ve PIN'i bilmeyen listeyi BULAMAZ.
-   Aile adı sadeleştirilerek giriyor: "Günay" ile "gunay" aynı aile —
+   Aile adı sadeleştirilerek giriyor: "Yıldız" ile "yildiz" aynı aile —
    anne-baba büyük harf/Türkçe harf farkıyla boş listeye düşmesin. */
 function aileAnahtari(aileAd, pin){
   return sha256(ANAHTAR_TUZU + '|' + sadelestir(aileAd) + '|' + pin);
@@ -452,6 +482,7 @@ async function girisDevam(){
   if(sadelestir(ad).length < 2){ girisHata('Aile adı en az 2 harf olmalı.'); return; }
   if(!/^\d{4}$/.test(pin)){ girisHata('PIN 4 rakam olmalı.'); return; }
   girisHata('');
+  kaliciHafiza = !!$('giris-hatirla').checked;
   const k = aileAnahtari(ad, pin);
   $('giris-dugme').disabled = true; $('giris-dugme').textContent = 'Bakılıyor…';
   try{
@@ -557,6 +588,9 @@ function isimKaydet(secilen){
    LİSTE
    ══════════════════════════════════════════════════════════════════════ */
 function listeyiAc(){
+  /* Bu telefonda ilk kez liste açılıyorsa "son bakış" ANI ŞİMDİ sayılıyor:
+     yoksa listede duran eski ürünlerin hepsi "yeni" diye şerit çıkarırdı. */
+  if(!sonBakis()) lsYaz(LS.sonBakis, String(Date.now()));
   $('liste-alt').textContent = aileAd + ' ailesi';
   $('alt-kisi').textContent = '👤 Bu telefonda: ' + kisi;
   $('cikis-onay').hidden = true;
@@ -605,10 +639,62 @@ function urunHtml(u){
          '</button>';
 }
 
+/* ── "SON BAKIŞINDAN BERİ" ────────────────────────────────────────────────
+   Telefon kapalıyken bildirim gönderemiyoruz (sunucu ister). Bunun yerine:
+   uygulamayı açtığında ne kaçırdığını söyleyen bir şerit.
+   · "Yeni" ölçütü: senin SON BAKTIĞIN andan sonra, BAŞKASI tarafından eklenmiş.
+     Kendi eklediğin ürün sana yeni değil.
+   · Son bakış anı bu telefonda tutuluyor (kişiye değil cihaza ait).
+   · Şerit dokununca kapanıyor ve o ürünler kısa süre parlıyor. Dokunulmazsa
+     duruyor — "gördüm" demeden kaybolması, kaçırmaya yol açardı. */
+function sonBakis(){ const v = parseInt(lsOku(LS.sonBakis) || '0', 10); return isFinite(v) ? v : 0; }
+function yeniUrunler(simdi){
+  const sb = sonBakis();
+  if(!sb) return [];   // bu telefonda ilk açılış: her şey "yeni" sayılmasın
+  return Object.entries(urunler || {})
+    .filter(([,u]) => u && u.ad && !u.alindi && (u.eklenme||0) > sb && u.ekleyen !== kisi)
+    .map(([id,u]) => Object.assign({ id }, u));
+}
+function yeniSeridiCiz(simdi){
+  const yeniler = yeniUrunler(simdi);
+  const s = $('yeni-serit');
+  if(!yeniler.length){ s.hidden = true; return; }
+  const acilSayi = yeniler.filter(u => u.acil).length;
+  const adlar = yeniler.slice(0,3).map(u => u.ad).join(', ') + (yeniler.length > 3 ? '…' : '');
+  s.innerHTML = '🆕 Son bakışından beri ' + yeniler.length + ' yeni ürün' +
+    (acilSayi ? ' (' + acilSayi + ' acil)' : '') +
+    '<small>' + kacis(adlar) + ' · dokun, gördüm say</small>';
+  s.hidden = false;
+}
+function yeniSeridiKapat(){
+  const yeniler = yeniUrunler(Date.now());
+  lsYaz(LS.sonBakis, String(Date.now()));
+  $('yeni-serit').hidden = true;
+  if(yeniler[0]) urunuParlat(yeniler[0].id);
+}
+
+/* ── WHATSAPP'TA HABER VER ────────────────────────────────────────────────
+   Gerçek bildirimin sunucusuz tek yolu: mesajı hazırlayıp WhatsApp'a
+   devretmek. Kişiyi/grubu WhatsApp'ın kendi ekranında seçiyorsun. */
+function waMetni(){
+  const b = bolumlereAyir(urunler, Date.now());
+  const satir = u => '• ' + u.ad + (u.not ? ' (' + u.not + ')' : '');
+  const parcalar = ['🛒 Alışveriş Sepetim'];
+  if(b.acil.length)   parcalar.push('', '🔴 ACİL', ...b.acil.map(satir));
+  if(b.normal.length) parcalar.push('', '⚪ Ayrıca', ...b.normal.map(satir));
+  return parcalar.join('\n');
+}
+function waPaylas(){
+  const url = 'https://wa.me/?text=' + encodeURIComponent(waMetni());
+  window.open(url, '_blank', 'noopener');
+}
+
 function listeyiCiz(){
   const simdi = Date.now();
   eskileriTemizle(simdi);
   const b = bolumlereAyir(urunler, simdi);
+  yeniSeridiCiz(simdi);
+  $('wa-dugme').hidden = !(b.acil.length || b.normal.length);
   $('liste-acil').innerHTML   = b.acil.map(urunHtml).join('');
   $('liste-normal').innerHTML = b.normal.map(urunHtml).join('');
   $('liste-alindi').innerHTML = b.alindi.map(urunHtml).join('');
@@ -731,7 +817,9 @@ function formKaydet(zorla){
     Veri.yaz(yol('urunler/' + id), { ad, not: not || null, acil, ekleyen: kisi, eklenme: Date.now(), alindi: false })
       .catch(() => mesaj('Kaydedilemedi. İnternetini kontrol et.'));
     panelKapat();
-    mesaj((acil ? '🔴 ' : '') + '“' + ad + '” eklendi.');
+    /* Acil bir şey eklendiğinde WhatsApp hatırlatması: bildirim olmadığı için
+       evdekiler ancak uygulamayı açınca görür (Gökşin, 2026-09-17). */
+    mesaj((acil ? '🔴 ' : '') + '“' + ad + '” eklendi.' + (acil ? ' Aşağıdan WhatsApp\'ta haber verebilirsin.' : ''));
     setTimeout(() => urunuParlat(id), 80);
   }
 }
@@ -816,6 +904,8 @@ function olaylariBagla(){
 
   $('ekle-dugme').addEventListener('click', () => ekleFormu(null));
   $('perde').addEventListener('click', panelKapat);
+  $('yeni-serit').addEventListener('click', yeniSeridiKapat);
+  $('wa-dugme').addEventListener('click', waPaylas);
 
   $('ekran-liste').addEventListener('click', e => {
     const b = e.target.closest('.urun');
