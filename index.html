@@ -23,7 +23,13 @@
     --yazi:#3a2b1c;
     --yazi2:#6e5a45;
     --cizgi:#dccdb0;
-    --acil:#b43a2c;
+    --acil:#b43a2c;         /* bölüm başlığı "🔴 Acil" */
+    /* Acil ürün kartı — kiremit (Gökşin, 2026-09-17: "kenardaki kırmızı şerit
+       çok belirgin değil, kartların ve yazının rengi de değişsin, parlak
+       kırmızı olmasın"). Ölçülerek seçildi: zemin sayfadan RENKLE ayrılıyor
+       (parlaklık farkı zaten düşük), yazı kiremit ama kontrastı 6.5 —
+       normal açıklamalardan (5.7) daha okunaklı. */
+    --kiremit:#8f3f22; --kiremit-zemin:#fdf0e8; --kiremit-cizgi:#b4502e;
     --yesil-zemin:#e2f1da; --yesil-cizgi:#5d9a53;   /* bugün eklendi */
     --mavi-zemin:#dfe9f4;  --mavi-yazi:#4f6f90;     /* alındı */
     --dugme:#8a5a2b; --dugme-yazi:#fffaf0;
@@ -60,9 +66,14 @@
     box-shadow:var(--golge);padding:.85rem 1rem;margin:.5rem 0;min-height:60px;border-left:6px solid transparent}
   .urun .ad{font-size:1.15rem;font-weight:650;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
   .urun .detay{font-size:.88rem;color:var(--yazi2);margin-top:.2rem}
-  .urun.acil{border-left-color:var(--acil)}
   .urun.bugun{background:var(--yesil-zemin);box-shadow:var(--golge),inset 0 0 0 2px var(--yesil-cizgi)}
-  .urun.acil.bugun{border-left-color:var(--acil)}
+  /* ⚠️ ACİL kuralları "bugün"den SONRA yazılı: ikisi de aynı ağırlıkta, sonra
+     gelen kazanıyor. Bugün eklenen acil bir ürün kiremit kalıyor, "bugün"
+     bilgisi yeşil çerçeve ve etiketle veriliyor. */
+  .urun.acil{background:var(--kiremit-zemin);border-left:7px solid var(--kiremit-cizgi)}
+  .urun.acil .ad{color:var(--kiremit)}
+  .urun.acil .detay{color:#8a5a45}
+  .urun.acil.bugun{background:var(--kiremit-zemin);box-shadow:var(--golge),inset 0 0 0 2px var(--yesil-cizgi)}
   .urun.alindi{background:var(--mavi-zemin);box-shadow:none}
   .urun.alindi .ad{color:var(--mavi-yazi);text-decoration:line-through;font-weight:500}
   .urun.alindi .detay{color:var(--mavi-yazi)}
