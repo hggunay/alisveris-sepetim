@@ -127,11 +127,38 @@
   .serit{position:sticky;top:0;z-index:10;margin:0 -14px;padding:.45rem 14px;text-align:center;font-size:.88rem;font-weight:600}
   #uyari-yerel{background:#e8e0f5;color:#4a3a73}
   #baglanti{background:#fbe7e3;color:var(--acil)}
+  /* Açılış ekranı */
+  #acilis{position:fixed;inset:0;z-index:50;background:var(--zemin);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:.9rem;padding:2rem}
+  #acilis img{width:140px;height:140px}
+  .acilis-ad{font-size:1.5rem;font-weight:800;color:var(--yazi)}
+  .acilis-yazi{font-size:.95rem;color:var(--yazi2)}
+  .acilis-nokta{display:flex;gap:.45rem}
+  .acilis-nokta span{width:11px;height:11px;border-radius:50%;background:var(--dugme);opacity:.35;
+    animation:acilisZipla 1.1s ease-in-out infinite}
+  .acilis-nokta span:nth-child(2){animation-delay:.18s}
+  .acilis-nokta span:nth-child(3){animation-delay:.36s}
+  @keyframes acilisZipla{0%,100%{opacity:.3;transform:translateY(0)}45%{opacity:1;transform:translateY(-6px)}}
+  @media (prefers-reduced-motion: reduce){ .acilis-nokta span{animation:none;opacity:.6} }
+
   #mesaj{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(104px + env(safe-area-inset-bottom));
     background:var(--yazi);color:#fff;padding:.65rem 1rem;border-radius:12px;z-index:30;max-width:90vw;text-align:center;font-size:.95rem}
 </style>
 </head>
 <body>
+
+<!-- AÇILIŞ EKRANI (Gökşin, 2026-09-17: "yükleniyor ekranı koyabilir miyiz").
+     HTML'de GÖRÜNÜR doğuyor, JavaScript'e bağlı değil: sayfa yenilenir
+     yenilenmez ortaya çıksın, "boş sayfa" anı hiç olmasın.
+     Kapanma anı: giriş/isim ekranı açılınca ya da listenin İLK verisi gelince
+     (bkz. acilisiKapat). Sunucu hiç cevap vermezse 6 saniyede kendi kapanıyor —
+     takılı kalan bir açılış ekranı, geç gelen listeden daha kötü. -->
+<div id="acilis">
+  <img src="icon-192.png" alt="">
+  <div class="acilis-ad">Alışveriş Sepetim</div>
+  <div class="acilis-nokta"><span></span><span></span><span></span></div>
+  <div class="acilis-yazi">Yükleniyor…</div>
+</div>
 
 <div id="uyari-yerel" class="serit" hidden>🧪 Deneme modu — liste yalnızca bu tarayıcıda duruyor</div>
 <div id="baglanti" class="serit" hidden>📡 İnternet bağlantısı yok — eklediklerin bağlanınca gönderilecek</div>
@@ -499,9 +526,20 @@ const silinmekteOlanlar = new Set();
 
 const yol = alt => 'aileler/' + anahtar + (alt ? '/' + alt : '');
 
+let _acilisKapandi = false;
+function acilisiKapat(){
+  if(_acilisKapandi) return;
+  _acilisKapandi = true;
+  const el = $('acilis');
+  if(el) el.hidden = true;
+}
+
 function ekranGoster(ad){
   ['giris','isim','liste'].forEach(e => { $('ekran-' + e).hidden = (e !== ad); });
   $('ekle-dugme').hidden = (ad !== 'liste');
+  /* Giriş ve isim ekranı için beklenecek veri yok — açılış ekranı hemen kapanır.
+     Listede ise ilk veri gelene kadar duruyor (bkz. listeyiAc). */
+  if(ad !== 'liste') acilisiKapat();
   panelKapat();
 }
 
@@ -633,7 +671,11 @@ function listeyiAc(){
   $('cikis-onay').hidden = true;
   ekranGoster('liste');
   if(dinlemeyiBirak) dinlemeyiBirak();
-  dinlemeyiBirak = Veri.dinle(yol('urunler'), deger => { urunler = deger || {}; listeyiCiz(); });
+  dinlemeyiBirak = Veri.dinle(yol('urunler'), deger => {
+    urunler = deger || {};
+    listeyiCiz();
+    acilisiKapat();   // ilk veri ekrana çizildi, açılış ekranı artık gereksiz
+  });
 }
 
 /* 48 saati geçen "alındı" ürünleri sil. Sunucu yok — işi listeyi açan
@@ -1041,6 +1083,10 @@ function baslat(){
     if(bagli) $('baglanti').hidden = true;
     else _baglantiZaman = setTimeout(() => { $('baglanti').hidden = false; }, 3000);
   });
+
+  /* Emniyet: sunucu hiç cevap vermezse açılış ekranı kilitli kalmasın.
+     6 saniye sonra ekran açılır; bağlantı yoksa zaten üstteki şerit söylüyor. */
+  setTimeout(acilisiKapat, 6000);
 
   if(!anahtar) ekranGoster('giris');
   else if(!kisi) isimEkraniniAc();
