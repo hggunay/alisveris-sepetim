@@ -119,7 +119,13 @@
     <label for="giris-aile">Aile adı</label>
     <input id="giris-aile" type="text" autocomplete="off" autocapitalize="words" placeholder="örn. Günay">
     <label for="giris-pin">PIN (4 rakam)</label>
-    <input id="giris-pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••">
+    <!-- Göz düğmesi: PIN gizli yazıldığı için yanlış rakama bastığını
+         göremiyordun (Gökşin, 2026-09-17). -->
+    <div style="display:flex;gap:.5rem;align-items:stretch">
+      <input id="giris-pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••" style="flex:1">
+      <button id="pin-goz" type="button" aria-label="PIN'i göster"
+        style="flex:0 0 auto;min-width:58px;border:2px solid var(--cizgi);border-radius:12px;background:#fff;font-size:1.3rem">👁</button>
+    </div>
     <div class="ipucu">Ailedeki herkes aynı aile adını ve PIN'i kullanır.</div>
     <div id="giris-hata" class="hata" hidden></div>
     <button id="giris-dugme" class="buyuk" type="button">Devam</button>
@@ -140,9 +146,15 @@
   <h1><img src="icon-192.png" alt=""> Alışveriş Sepetim</h1>
   <div class="alt-baslik" id="isim-aile"></div>
   <div class="kutu">
-    <label for="isim-girdi">Bu telefonu kim kullanıyor?</label>
-    <input id="isim-girdi" type="text" autocomplete="off" autocapitalize="words" placeholder="örn. Anne">
-    <div id="isim-oneriler"></div>
+    <div id="isim-liste-alani" hidden>
+      <label>Bu telefonu kim kullanıyor?</label>
+      <div id="isim-oneriler"></div>
+      <button id="isim-yeni-dugme" class="buyuk ikincil" type="button">➕ Listede yokum, adımı yazacağım</button>
+    </div>
+    <div id="isim-yazma-alani">
+      <label for="isim-girdi">Bu telefonu kim kullanıyor?</label>
+      <input id="isim-girdi" type="text" autocomplete="off" autocapitalize="words" placeholder="örn. Anne">
+    </div>
     <div class="ipucu">Bir ürünü aldığında "kim aldı" kısmında bu ad yazacak.</div>
     <div id="isim-hata" class="hata" hidden></div>
     <button id="isim-dugme" class="buyuk" type="button">Başla</button>
@@ -485,29 +497,59 @@ function aileyeGir(k, ad){
 /* ══════════════════════════════════════════════════════════════════════
    İSİM
    ══════════════════════════════════════════════════════════════════════ */
+/* Ailede kayıtlı kişiler: `aileler/<anahtar>/kisiler/<sade ad> = "Görünen Ad"`.
+   ⚠️ Bu bir HESAP DEĞİL, sadece etiket listesi. Şifre, yetki, ayrı veri yok.
+   Var oluş sebebi (Gökşin, 2026-09-17): ikinci telefonda adını yeniden yazmak
+   zorunda kalıyordu ve "yeni kişi mi oluşuyor?" diye tereddüt etti. Artık
+   aile adı + PIN girildikten sonra kayıtlı isimler dokunulabilir olarak çıkıyor. */
+let _kisiler = {};
+
+function isimListesiCiz(){
+  const adlar = Object.values(_kisiler).sort((a,b) => a.localeCompare(b,'tr'));
+  $('isim-oneriler').innerHTML = adlar.map(a =>
+    '<button type="button" class="isim-onerisi" data-ad="' + kacis(a) + '">' + kacis(a) + '</button>').join('');
+  const varMi = adlar.length > 0;
+  $('isim-liste-alani').hidden = !varMi;
+  $('isim-yeni-dugme').hidden = false;
+  // Kayıtlı kimse yoksa doğrudan yazma alanı açık gelir (ilk kuran kişi).
+  $('isim-yazma-alani').hidden = varMi;
+}
+
 function isimEkraniniAc(){
   $('isim-aile').textContent = aileAd + ' ailesi';
   $('isim-girdi').value = kisi || '';
   $('isim-hata').hidden = true;
-  $('isim-oneriler').innerHTML = '';
+  _kisiler = {};
+  isimListesiCiz();
   ekranGoster('isim');
-  /* Listede daha önce ürün ekleyip almış kişilerin adları dokunulabilir
-     öneri olarak çıkıyor — anneni telefonuna kurarken "Anne"ye dokunman yeter.
-     ⚠️ Yeni telefonda liste HENÜZ YÜKLÜ DEĞİL (canlı dinleme isim seçildikten
-     sonra başlıyor), o yüzden burada bir kez ayrıca okunuyor. */
-  Veri.oku(yol('urunler')).then(d => {
+  /* ⚠️ Kişi listesi burada AYRICA okunuyor: canlı dinleme isim seçildikten
+     sonra başlıyor, yani bu ekranda liste henüz yüklü değil.
+     Eski listelerde `kisiler` düğümü olmayabilir — o zaman ürünlerdeki
+     "ekleyen/alan" adlarından toplanıyor, kimse elle bir şey yapmasın diye. */
+  Promise.all([ Veri.oku(yol('kisiler')), Veri.oku(yol('urunler')) ]).then(([k, u]) => {
     if($('ekran-isim').hidden) return;
-    const adlar = new Set();
-    Object.values(d || {}).forEach(u => { if(u && u.ekleyen) adlar.add(u.ekleyen); if(u && u.alan) adlar.add(u.alan); });
-    $('isim-oneriler').innerHTML = [...adlar].sort((a,b) => a.localeCompare(b,'tr')).map(a =>
-      '<button type="button" class="isim-onerisi" data-ad="' + kacis(a) + '">' + kacis(a) + '</button>').join('');
+    Object.entries(k || {}).forEach(([anahtarAd, ad]) => { if(ad) _kisiler[anahtarAd] = ad; });
+    Object.values(u || {}).forEach(x => {
+      [x && x.ekleyen, x && x.alan].forEach(ad => {
+        if(ad && !_kisiler[sadelestir(ad)]) _kisiler[sadelestir(ad)] = ad;
+      });
+    });
+    isimListesiCiz();
   }).catch(() => {});
 }
 
-function isimKaydet(){
-  const ad = $('isim-girdi').value.trim().replace(/\s+/g,' ');
-  if(ad.length < 2){ const el=$('isim-hata'); el.textContent='Adın en az 2 harf olmalı.'; el.hidden=false; return; }
+function isimKaydet(secilen){
+  const ham = (secilen != null ? secilen : $('isim-girdi').value).trim().replace(/\s+/g,' ');
+  if(ham.length < 2){ const el=$('isim-hata'); el.textContent='Adın en az 2 harf olmalı.'; el.hidden=false; return; }
+  const sade = sadelestir(ham);
+  /* "gökşin" yazan, listede "Gökşin" varsa ONA bağlanır — ürünlerde iki farklı
+     yazım görünmesin. Yeni bir adsa aile listesine ekleniyor. */
+  const ad = _kisiler[sade] || ham;
   kisi = ad; lsYaz(LS.kisi, ad);
+  if(!_kisiler[sade]){
+    _kisiler[sade] = ad;
+    Veri.guncelle(yol('kisiler'), { [sade]: ad }).catch(() => {});
+  }
   listeyiAc();
 }
 
@@ -752,10 +794,24 @@ function olaylariBagla(){
   $('giris-duzelt').addEventListener('click', () => { $('giris-bulunamadi').hidden = true; $('giris-aile').focus(); });
   $('giris-yeni').addEventListener('click', yeniAileOlustur);
 
-  $('isim-dugme').addEventListener('click', isimKaydet);
+  $('pin-goz').addEventListener('click', () => {
+    const g = $('giris-pin'), gizli = g.type === 'password';
+    g.type = gizli ? 'text' : 'password';
+    $('pin-goz').textContent = gizli ? '🙈' : '👁';
+    $('pin-goz').setAttribute('aria-label', gizli ? 'PIN\'i gizle' : 'PIN\'i göster');
+    g.focus();
+  });
+
+  $('isim-dugme').addEventListener('click', () => isimKaydet());
   $('isim-girdi').addEventListener('keydown', e => { if(e.key === 'Enter') isimKaydet(); });
   $('isim-oneriler').addEventListener('click', e => {
-    const b = e.target.closest('.isim-onerisi'); if(b){ $('isim-girdi').value = b.dataset.ad; isimKaydet(); }
+    const b = e.target.closest('.isim-onerisi'); if(b) isimKaydet(b.dataset.ad);
+  });
+  $('isim-yeni-dugme').addEventListener('click', () => {
+    $('isim-yazma-alani').hidden = false;
+    $('isim-yeni-dugme').hidden = true;
+    $('isim-girdi').value = '';
+    $('isim-girdi').focus();
   });
 
   $('ekle-dugme').addEventListener('click', () => ekleFormu(null));
