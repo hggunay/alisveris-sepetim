@@ -42,11 +42,16 @@
     font-size:18px;line-height:1.35;-webkit-tap-highlight-color:transparent}
   body{padding:0 14px calc(110px + env(safe-area-inset-bottom))}
   main{max-width:560px;margin:0 auto}
-  h1{font-size:1.45rem;margin:.9rem 0 .1rem;display:flex;align-items:center;gap:.6rem}
-  /* Simge büyütüldü (Gökşin, 2026-09-17: "biraz görsellik olsun").
-     Köşeler simgenin kendisinde yuvarlak, burada ayrıca yuvarlatılmıyor. */
-  h1 img{width:64px;height:64px;flex:0 0 auto}
-  .alt-baslik{color:var(--yazi2);font-size:.95rem;margin-bottom:.6rem}
+  /* BAŞLIK KUTUSU (Gökşin, 2026-09-17: "sepet resmi çok küçük, büyüsün, yanında
+     uygulama adı büyükçe görünsün, başlık alanını çerçeveleyelim").
+     Simge genişliğe göre esniyor: dar telefonda 76px, geniş ekranda 96px —
+     sabit verirsem küçük ekranda başlığı ikinci satıra itiyordu. */
+  .baslik-kutu{display:flex;align-items:center;gap:.85rem;margin:.9rem 0 1rem;
+    padding:.75rem .9rem;background:var(--kart);border:2px solid var(--cizgi);
+    border-radius:18px;box-shadow:var(--golge)}
+  .baslik-kutu img{width:clamp(76px,22vw,96px);height:clamp(76px,22vw,96px);flex:0 0 auto}
+  .baslik-ad{font-size:1.5rem;font-weight:800;line-height:1.15;color:var(--yazi)}
+  .alt-baslik{color:var(--yazi2);font-size:.95rem;margin-top:.2rem}
   button{font:inherit;color:inherit;cursor:pointer}
   input{font:inherit;font-size:1.1rem;width:100%;padding:.8rem .9rem;border:2px solid var(--cizgi);
     border-radius:12px;background:#fff;color:var(--yazi)}
@@ -133,8 +138,13 @@
 
 <!-- ─── GİRİŞ: aile adı + PIN ─────────────────────────────────────────── -->
 <main id="ekran-giris" hidden>
-  <h1><img src="icon-192.png" alt=""> Alışveriş Sepetim</h1>
-  <div class="alt-baslik">Ailenin ortak alışveriş listesi</div>
+  <div class="baslik-kutu">
+    <img src="icon-192.png" alt="">
+    <div>
+      <h1 class="baslik-ad">Alışveriş Sepetim</h1>
+      <div class="alt-baslik">Ailenin ortak alışveriş listesi</div>
+    </div>
+  </div>
   <div class="kutu">
     <label for="giris-aile">Aile adı</label>
     <!-- Yer tutucu bilerek NÖTR bir ad: gerçek soyadı herkese görünmesin (Gökşin, 2026-09-17). -->
@@ -171,8 +181,13 @@
 
 <!-- ─── İSİM: bu telefonu kim kullanıyor ──────────────────────────────── -->
 <main id="ekran-isim" hidden>
-  <h1><img src="icon-192.png" alt=""> Alışveriş Sepetim</h1>
-  <div class="alt-baslik" id="isim-aile"></div>
+  <div class="baslik-kutu">
+    <img src="icon-192.png" alt="">
+    <div>
+      <h1 class="baslik-ad">Alışveriş Sepetim</h1>
+      <div class="alt-baslik" id="isim-aile"></div>
+    </div>
+  </div>
   <div class="kutu">
     <div id="isim-liste-alani" hidden>
       <label>Bu telefonu kim kullanıyor?</label>
@@ -191,8 +206,13 @@
 
 <!-- ─── LİSTE ─────────────────────────────────────────────────────────── -->
 <main id="ekran-liste" hidden>
-  <h1><img src="icon-192.png" alt=""> Alışveriş Sepetim</h1>
-  <div class="alt-baslik" id="liste-alt"></div>
+  <div class="baslik-kutu">
+    <img src="icon-192.png" alt="">
+    <div>
+      <h1 class="baslik-ad">Alışveriş Sepetim</h1>
+      <div class="alt-baslik" id="liste-alt"></div>
+    </div>
+  </div>
 
   <!-- Bildirim yerine geçen iki şey (Gökşin, 2026-09-17): telefon kapalıyken
        haber vermek sunucu istiyor, o yüzden (1) açınca ne kaçırdığını söyleyen
