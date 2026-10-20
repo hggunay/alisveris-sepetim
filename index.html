@@ -53,9 +53,11 @@
   .baslik-ad{font-size:1.5rem;font-weight:800;line-height:1.15;color:var(--yazi)}
   .alt-baslik{color:var(--yazi2);font-size:.95rem;margin-top:.2rem}
   button{font:inherit;color:inherit;cursor:pointer}
-  input{font:inherit;font-size:1.1rem;width:100%;padding:.8rem .9rem;border:2px solid var(--cizgi);
+  input,textarea{font:inherit;font-size:1.1rem;width:100%;padding:.8rem .9rem;border:2px solid var(--cizgi);
     border-radius:12px;background:#fff;color:var(--yazi)}
-  input:focus{outline:none;border-color:var(--dugme)}
+  textarea{resize:none;overflow:hidden;line-height:1.4;min-height:5.2rem}
+  input:focus,textarea:focus{outline:none;border-color:var(--dugme)}
+  .not-yazi{white-space:pre-line}
   label{display:block;font-weight:600;margin:1rem 0 .35rem}
   .ipucu{color:var(--yazi2);font-size:.9rem;margin-top:.3rem}
   .buyuk{display:block;width:100%;min-height:56px;border:0;border-radius:14px;
@@ -707,14 +709,15 @@ function bolumlereAyir(harita, simdi){
 function urunHtml(u){
   const sinif = ['urun', u.acil && !u.alindi ? 'acil' : '', !u.alindi && bugunMu(u.eklenme) ? 'bugun' : '', u.alindi ? 'alindi' : '']
     .filter(Boolean).join(' ');
-  const parcalar = [];
-  if(u.not) parcalar.push('„' + kacis(u.not) + '“');
-  if(u.alindi) parcalar.push('✓ ' + kacis(u.alan || '?') + ' aldı · ' + zamanYazisi(u.alinma));
-  else parcalar.push(kacis(u.ekleyen || '?') + ' ekledi · ' + zamanYazisi(u.eklenme));
+  const kim = u.alindi
+    ? '✓ ' + kacis(u.alan || '?') + ' aldı · ' + zamanYazisi(u.alinma)
+    : kacis(u.ekleyen || '?') + ' ekledi · ' + zamanYazisi(u.eklenme);
   const etiket = (!u.alindi && bugunMu(u.eklenme)) ? '<span class="etiket">bugün</span>' : '';
+  /* Not çok satırlı olabilir (liste yazmak için, Gökşin 2026-10-20) — kendi satırında, alt alta. */
   return '<button type="button" class="' + sinif + '" data-id="' + kacis(u.id) + '">' +
            '<div class="ad">' + kacis(u.ad) + etiket + '</div>' +
-           '<div class="detay">' + parcalar.join(' · ') + '</div>' +
+           (u.not ? '<div class="detay not-yazi">' + kacis(u.not) + '</div>' : '') +
+           '<div class="detay">' + kim + '</div>' +
          '</button>';
 }
 
@@ -757,7 +760,11 @@ function yeniSeridiKapat(){
    devretmek. Kişiyi/grubu WhatsApp'ın kendi ekranında seçiyorsun. */
 function waMetni(){
   const b = bolumlereAyir(urunler, Date.now());
-  const satir = u => '• ' + u.ad + (u.not ? ' (' + u.not + ')' : '');
+  const satir = u => {
+    if(!u.not) return '• ' + u.ad;
+    if(u.not.indexOf('\n') < 0) return '• ' + u.ad + ' (' + u.not + ')';
+    return '• ' + u.ad + '\n' + u.not.split('\n').map(s => '   ' + s).join('\n');
+  };
   const parcalar = ['🛒 Alışveriş Sepetim'];
   if(b.acil.length)   parcalar.push('', '🔴 ACİL', ...b.acil.map(satir));
   if(b.normal.length) parcalar.push('', '⚪ Ayrıca', ...b.normal.map(satir));
@@ -860,7 +867,7 @@ function ekleFormu(u){
     '<label for="f-ad" class="sifir-kenar">Ürün</label>' +
     '<input id="f-ad" type="text" autocomplete="off" autocapitalize="sentences" maxlength="60" placeholder="örn. yoğurt" value="' + (duzenle ? kacis(u.ad) : '') + '">' +
     '<label for="f-not">Not <span style="font-weight:400;color:var(--yazi2)">(isteğe bağlı)</span></label>' +
-    '<input id="f-not" type="text" autocomplete="off" maxlength="80" placeholder="örn. 1 kg, tam yağlı" value="' + (duzenle ? kacis(u.not || '') : '') + '">' +
+    '<textarea id="f-not" rows="3" autocomplete="off" autocapitalize="sentences" maxlength="300" placeholder="örn. 1 kg, tam yağlı&#10;(alt alta da yazabilirsin)">' + (duzenle ? kacis(u.not || '') : '') + '</textarea>' +
     '<label>Ne kadar acil?</label>' +
     '<div class="ikili">' +
       '<button type="button" class="secim acil-secim' + (acil ? ' secili' : '') + '" data-acil="1">🔴 Acil</button>' +
@@ -875,6 +882,10 @@ function ekleFormu(u){
     duzenle ? u.id : null
   );
   $('panel').dataset.duzenlenen = duzenle ? u.id : '';
+  const notKutu = $('f-not');
+  const uzat = () => { notKutu.style.height = 'auto'; notKutu.style.height = notKutu.scrollHeight + 'px'; };
+  notKutu.addEventListener('input', uzat);
+  uzat();
   setTimeout(() => { const g=$('f-ad'); if(g){ g.focus(); if(duzenle) g.select(); } }, 60);
 }
 
@@ -882,7 +893,10 @@ function formAcilMi(){ const s = document.querySelector('#panel .secim.secili');
 
 function formKaydet(zorla){
   const ad = ($('f-ad').value || '').trim().replace(/\s+/g,' ');
-  const not = ($('f-not').value || '').trim().replace(/\s+/g,' ');
+  // Satır sonları korunur; her satırın içindeki fazla boşluk ve üst üste boş satırlar temizlenir.
+  const not = ($('f-not').value || '').split('\n')
+    .map(s => s.trim().replace(/\s+/g,' ')).join('\n')
+    .replace(/\n{3,}/g,'\n\n').trim();
   const acil = formAcilMi();
   const duzenlenen = $('panel').dataset.duzenlenen || null;
   const hataEl = $('f-hata');
@@ -952,7 +966,7 @@ function secenekler(u){
       '<button type="button" class="buyuk ikincil" data-is="duzenle">✏️ Düzenle</button>';
   panelAc(
     '<h2>' + ad + '</h2>' +
-    (u.not ? '<div class="ipucu" style="margin-top:0">„' + kacis(u.not) + '“</div>' : '') +
+    (u.not ? '<div class="ipucu not-yazi" style="margin-top:0">' + kacis(u.not) + '</div>' : '') +
     govde +
     '<button type="button" class="buyuk ikincil" data-is="silsor" style="color:var(--acil)">🗑️ Sil</button>' +
     '<div id="sil-onay"></div>' +
@@ -1058,7 +1072,8 @@ function olaylariBagla(){
     }
   });
   $('panel').addEventListener('keydown', e => {
-    if(e.key === 'Enter' && e.target.matches('#f-ad, #f-not')) formKaydet(false);
+    // Not kutusunda Enter yeni satır açar; kaydetmez.
+    if(e.key === 'Enter' && e.target.matches('#f-ad')) formKaydet(false);
   });
   document.addEventListener('keydown', e => { if(e.key === 'Escape' && !$('panel').hidden) panelKapat(); });
 }
